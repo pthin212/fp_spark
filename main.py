@@ -13,6 +13,7 @@ from util.logger import Log4j
 from schema.event_schema import create_json_schema
 
 if __name__ == "__main__":
+
     conf = Config()
     spark_conf = conf.spark_conf
     kafka_conf = conf.kafka_conf
@@ -23,12 +24,10 @@ if __name__ == "__main__":
         "driver": conf.postgres_conf["driver"]
     }
 
-    # Initialize Spark session
     spark = SparkSession.builder \
         .config(conf=spark_conf) \
         .getOrCreate()
 
-    # Set up logging
     log = Log4j(spark)
     log.info(f"spark_conf: {spark_conf.getAll()}")
     log.info(f"kafka_conf: {kafka_conf.items()}")
@@ -43,6 +42,7 @@ if __name__ == "__main__":
         .options(**kafka_conf) \
         .load()
 
+
     # Parse JSON data
     json_schema = create_json_schema()
     df_parsed = df.select(from_json(col("value").cast("string"), json_schema).alias("jsonData"))
@@ -51,6 +51,7 @@ if __name__ == "__main__":
     df_enriched = df_parsed.withColumn("userAgentInfo", parse_user_agent_udf(col("jsonData.user_agent"))) \
         .withColumn("tldInfo", get_tld_udf(col("jsonData.current_url")))
 
+
     # Extract dimension tables
     dim_browser = extract_browser_dim(df_enriched)
     dim_os = extract_os_dim(df_enriched)
@@ -58,6 +59,7 @@ if __name__ == "__main__":
 
     # Extract fact table
     fact_event = extract_fact_table(df_enriched)
+
 
     # Write dimension tables
     dim_browser_query = dim_browser.writeStream \
@@ -82,5 +84,5 @@ if __name__ == "__main__":
         .foreachBatch(lambda df, id: write_fact_table(df, id, jdbc_url, jdbc_properties)) \
         .start()
 
-    # Wait for any stream to terminate
+
     spark.streams.awaitAnyTermination()
