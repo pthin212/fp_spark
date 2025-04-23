@@ -1,4 +1,4 @@
-# 1. Database Design
+# 1. Dim Model
 
 ## 1.1. fact_event
 | Column        | Type     |
