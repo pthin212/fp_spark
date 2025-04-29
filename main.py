@@ -6,6 +6,7 @@ from udfs.url_udfs import register_url_udfs
 
 from tables.dim_tables import upsert_dim_table, extract_browser_dim, extract_os_dim, extract_tld_dim
 from tables.fact_tables import extract_fact_table, write_fact_table
+from tables.process_batch import process_batch
 
 from util.config import Config
 from util.logger import Log4j
@@ -52,37 +53,10 @@ if __name__ == "__main__":
         .withColumn("tldInfo", get_tld_udf(col("jsonData.current_url")))
 
 
-    # Extract dimension tables
-    dim_browser = extract_browser_dim(df_enriched)
-    dim_os = extract_os_dim(df_enriched)
-    dim_tld = extract_tld_dim(df_enriched)
-
-    # Extract fact table
-    fact_event = extract_fact_table(df_enriched)
-
-
-    # Write dimension tables
-    dim_browser_query = dim_browser.writeStream \
+    # Start streaming query to process each batch and write to dim/fact tables via process_batch function
+    query = df_enriched.writeStream \
         .outputMode("append") \
-        .foreachBatch(
-        lambda df, id: upsert_dim_table(df, id, "dim_browser", ["browser_key"], spark, jdbc_url, jdbc_properties)) \
+        .foreachBatch(lambda df, id: process_batch(df, id, spark, jdbc_url, jdbc_properties, extract_browser_dim, extract_os_dim, extract_tld_dim, extract_fact_table, upsert_dim_table, write_fact_table)) \
         .start()
-
-    dim_os_query = dim_os.writeStream \
-        .outputMode("append") \
-        .foreachBatch(lambda df, id: upsert_dim_table(df, id, "dim_os", ["os_key"], spark, jdbc_url, jdbc_properties)) \
-        .start()
-
-    dim_tld_query = dim_tld.writeStream \
-        .outputMode("append") \
-        .foreachBatch(lambda df, id: upsert_dim_table(df, id, "dim_tld", ["tld"], spark, jdbc_url, jdbc_properties)) \
-        .start()
-
-    # Write fact table
-    fact_event_query = fact_event.writeStream \
-        .outputMode("append") \
-        .foreachBatch(lambda df, id: write_fact_table(df, id, jdbc_url, jdbc_properties)) \
-        .start()
-
 
     spark.streams.awaitAnyTermination()
